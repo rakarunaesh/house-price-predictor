@@ -1,0 +1,179 @@
+---
+# Streamlit UI Deployment
+# This deploys the Streamlit frontend that calls the KServe API
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streamlit-app
+  namespace: mlops-prod
+  labels:
+    app: streamlit-app
+    component: frontend
+spec:
+  replicas: 2  # 2 replicas for high availability
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: streamlit-app
+  template:
+    metadata:
+      labels:
+        app: streamlit-app
+        component: frontend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8501"
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: streamlit
+          image: rakarun/mlops:streamlit-latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8501
+              protocol: TCP
+          env:
+            # Point Streamlit to the KServe API endpoint
+            - name: API_URL
+              value: "http://house-price-predictor.default.svc.cluster.local"
+            - name: APP_VERSION
+              value: "1.0.0"
+            - name: LOG_LEVEL
+              value: "INFO"
+
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          # Health checks
+          livenessProbe:
+            httpGet:
+              path: "/_stcore/health"
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: "/_stcore/health"
+              port: 8501
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          # Mounted volumes (if needed for configs)
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+
+      # Volumes
+      volumes:
+        - name: config
+          configMap:
+            name: streamlit-config
+            optional: true
+
+---
+# Service to expose Streamlit
+apiVersion: v1
+kind: Service
+metadata:
+  name: streamlit-app
+  namespace: mlops-prod
+  labels:
+    app: streamlit-app
+spec:
+  type: LoadBalancer  # Use LoadBalancer for external access
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8501
+      protocol: TCP
+  selector:
+    app: streamlit-app
+
+---
+# Ingress for Streamlit (alternative to LoadBalancer)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: streamlit-ingress
+  namespace: mlops-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: app.example.com  # Change to your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: streamlit-app
+                port:
+                  number: 80
+
+---
+# HorizontalPodAutoscaler for Streamlit
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: streamlit-hpa
+  namespace: kserve
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: streamlit-app
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# ConfigMap for Streamlit configuration (optional)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streamlit-config
+  namespace: kserve
+data:
+  streamlit.toml: |
+    [client]
+    showErrorDetails = true
+
+    [logger]
+    level = "info"
+
+    [server]
+    port = 8501
+    headless = true
+    runOnSave = false
+    maxUploadSize = 200

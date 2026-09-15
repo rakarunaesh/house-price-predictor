@@ -1,0 +1,35 @@
+# Kustomization file for KServe deployment
+# Allows flexible management of manifests with overlays for different environments
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: default
+
+# Resources to include
+resources:
+  - inference-service.yaml
+  - streamlit-deployment.yaml
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: house-price-predictor
+  app.kubernetes.io/part-of: mlops-pipeline
+
+# Common annotations
+commonAnnotations:
+  app.kubernetes.io/managed-by: kustomize
+
+# Images - update these to your registry
+images:
+  - name: rakarun/mlops
+    newName: rakarun/mlops
+    newTag: latest
+
+# Name prefix for all resources
+namePrefix: prod-
+
+# Replicas override
+replicas:
+  - name: streamlit-app
+    count: 2
