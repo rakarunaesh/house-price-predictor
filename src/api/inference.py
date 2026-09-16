@@ -1,11 +1,13 @@
+import os
 import joblib
 import pandas as pd
 from datetime import datetime
 from schemas import HousePredictionRequest, PredictionResponse
 
-# Load model and preprocessor
-MODEL_PATH = "models/trained/house_price_model.pkl"
-PREPROCESSOR_PATH = "models/trained/preprocessor.pkl"
+# Load model and preprocessor (path overridable for object-storage-backed deployments)
+MODEL_DIR = os.environ.get("MODEL_DIR", "models/trained")
+MODEL_PATH = os.path.join(MODEL_DIR, os.environ.get("MODEL_FILENAME", "house-price-predictor.pkl"))
+PREPROCESSOR_PATH = os.path.join(MODEL_DIR, os.environ.get("PREPROCESSOR_FILENAME", "preprocessor.pkl"))
 
 try:
     model = joblib.load(MODEL_PATH)

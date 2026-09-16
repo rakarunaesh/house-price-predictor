@@ -1,0 +1,123 @@
+---
+# KServe InferenceService for House Price Model — EKS / PRODUCTION
+# Model artifacts are pulled from S3 at pod startup by an initContainer into a
+# shared emptyDir volume. Update the model without rebuilding the image: just
+# overwrite the S3 object and roll the deployment.
+#
+# Same Docker image as inference-service.yaml (local/kind). The image's
+# inference.py reads MODEL_DIR from the environment (default:
+# "models/trained", i.e. the baked-in path) - here we override it to
+# "/mnt/models" so it reads the S3-fetched files instead. No rebuild needed
+# to switch between local and EKS modes, only this manifest differs.
+
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: house-price-predictor
+  namespace: mlops-prod
+  labels:
+    app: house-price-predictor
+    version: v1
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 3
+
+    volumes:
+      - name: model-storage
+        emptyDir: {}
+
+    initContainers:
+      - name: model-fetcher
+        image: amazon/aws-cli:2.15.0
+        command:
+          - "sh"
+          - "-c"
+          - |
+            echo "Downloading model artifacts from $MODEL_S3_URI ..."
+            aws s3 cp "$MODEL_S3_URI" /mnt/models/ --recursive
+            echo "Done. Contents:"
+            ls -la /mnt/models/
+        env:
+          - name: MODEL_S3_URI
+            valueFrom:
+              configMapKeyRef:
+                name: house-price-model-config
+                key: MODEL_S3_URI
+          - name: AWS_DEFAULT_REGION
+            valueFrom:
+              configMapKeyRef:
+                name: house-price-model-config
+                key: AWS_REGION
+          # Prefer IRSA (IAM Roles for Service Accounts) in real EKS instead of
+          # static keys - see notes below. These are only needed if not using IRSA.
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: model-storage-credentials
+                key: AWS_ACCESS_KEY_ID
+                optional: true
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: model-storage-credentials
+                key: AWS_SECRET_ACCESS_KEY
+                optional: true
+        volumeMounts:
+          - name: model-storage
+            mountPath: /mnt/models
+
+    # Use this ServiceAccount if authenticating to S3 via IRSA (recommended for EKS)
+    # instead of the static AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY secret above.
+    # serviceAccountName: house-price-predictor-sa
+
+    containers:
+      - name: kserve-container
+        image: rakarun/mlops:house-price-model-latest
+        ports:
+          - containerPort: 8000
+            protocol: TCP
+        env:
+          - name: MODEL_DIR
+            value: "/mnt/models"
+        volumeMounts:
+          - name: model-storage
+            mountPath: /mnt/models
+            readOnly: true
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+---
+# Service to expose the InferenceService
+apiVersion: v1
+kind: Service
+metadata:
+  name: house-price-predictor
+  namespace: mlops-prod
+  labels:
+    app: house-price-predictor
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    serving.kserve.io/inferenceservice: house-price-predictor
+
+---
+# Non-secret config: where the model lives in S3, and which region
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: house-price-model-config
+  namespace: mlops-prod
+data:
+  MODEL_S3_URI: "s3://your-bucket-name/house-price-predictor/latest/"
+  AWS_REGION: "us-east-1"

@@ -1,7 +1,10 @@
 ---
-# KServe InferenceService for House Price Model (v0.11.0, RawDeployment mode)
-# Uses "custom container" predictor since the image is a plain FastAPI app
-# (not KServe's sklearn-server protocol contract)
+# KServe InferenceService for House Price Model — LOCAL/KIND TESTING
+# Model artifacts are baked into the Docker image (models/trained/*.pkl via Dockerfile COPY).
+# No S3, no initContainer, no credentials needed. Good for local kind development.
+#
+# For EKS/production, use inference-service-eks.yaml instead (pulls model from S3 at
+# pod startup so you don't need to rebuild the image to update the model).
 
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
