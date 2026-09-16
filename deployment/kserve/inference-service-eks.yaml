@@ -22,6 +22,8 @@ spec:
   predictor:
     minReplicas: 1
     maxReplicas: 3
+    imagePullSecrets:
+      - name: regcred
 
     volumes:
       - name: model-storage

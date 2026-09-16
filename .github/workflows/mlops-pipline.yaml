@@ -27,17 +27,17 @@ jobs:
 
       - name: Process data
         run: |
-          python src/data/run_processing.py --input data/raw/house_data.csv --output data/processed/cleaned_house_data.csv
+          python src/data/run_processing.py --input data/raw/house_data_combined.csv --output data/processed/cleaned_house_data_combined.csv
 
       - name: Engineer features
         run: |
-          python src/features/engineer.py --input data/processed/cleaned_house_data.csv --output data/processed/featured_house_data.csv --preprocessor models/trained/preprocessor.pkl
+          python src/features/engineer.py --input data/processed/cleaned_house_data_combined.csv --output data/processed/featured_house_data_combined.csv --preprocessor models/trained/preprocessor.pkl
 
       - name: Upload processed data
         uses: actions/upload-artifact@v4
         with:
           name: processed-data
-          path: data/processed/featured_house_data.csv
+          path: data/processed/featured_house_data_combined.csv
 
       - name: Upload preprocessor
         uses: actions/upload-artifact@v4
@@ -82,7 +82,7 @@ jobs:
       - name: Train model
         run: |
           mkdir -p models
-          python src/models/train_model.py --config configs/model_config.yaml --data data/processed/featured_house_data.csv --models-dir models --mlflow-tracking-uri http://localhost:5000
+          python src/models/train_model.py --config configs/model_config.yaml --data data/processed/featured_house_data_combined.csv --models-dir models --mlflow-tracking-uri http://localhost:5000
 
       - name: Upload trained model
         uses: actions/upload-artifact@v4

@@ -40,3 +40,9 @@ dist/
 # Ignore all .pkl files (models, preprocessors, etc.)
 *.pkl
 
+# Ignore local MLflow tracking store and raw dataset downloads
+mlruns/
+archive.zip
+Housing.csv
+models_large_test/
+

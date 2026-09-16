@@ -42,7 +42,7 @@ spec:
           env:
             # Point Streamlit to the KServe API endpoint
             - name: API_URL
-              value: "http://house-price-predictor.default.svc.cluster.local"
+              value: "http://house-price-predictor.mlops-prod.svc.cluster.local"
             - name: APP_VERSION
               value: "1.0.0"
             - name: LOG_LEVEL
